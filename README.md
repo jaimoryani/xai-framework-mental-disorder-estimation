@@ -49,8 +49,8 @@ python -m nltk.downloader punkt stopwords wordnet
 
 ### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/jaimoryani/BDA-API
-cd BDA-API
+git clone https://github.com/jaimoryani/xai-framework-mental-disorder-estimation
+cd xai-framework-mental-disorder-estimation
 ```
 
 ### Step 2: Install Required Packages
