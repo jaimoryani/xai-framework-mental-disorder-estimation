@@ -1,1 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stress Detection</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Additional styling for animations */
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        }
+        .fade-in {
+            animation: fadeIn 1s ease-in;
+        }
 
+        .fade-out {
+            animation: fadeOut 1s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        #loading {
+            display: none;
+        }
+
+        #result {
+            display: none; /* Initially hidden */
+        }
+
+        .interactive-btn {
+            transition: transform 0.3s;
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+
+        .interactive-btn:hover {
+            transform: scale(1.05); /* Slightly less aggressive scale for general buttons */
+            background-color: #0056b3;
+            border-color: #0056b3;
+        }
+        .card-header {
+            background-color: #e9ecef;
+            font-weight: bold;
+        }
+        .shap-explanation-container {
+            max-height: 400px; /* Limit height for scroll if many features */
+            overflow-y: auto;
+            margin-top: 15px;
+            padding-right: 10px; /* For scrollbar spacing */
+        }
+        .list-group-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 15px;
+            font-size: 0.9em;
+        }
+        .list-group-item strong {
+            flex-basis: 60%;
+            text-align: left;
+        }
+        .list-group-item span {
+            flex-basis: 35%;
+            text-align: right;
+            font-weight: bold;
+        }
+        .progress {
+            margin-top: 5px;
+            width: 100%;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px; /* Adjust height as needed */
+            width: 100%;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="homepage" class="container mt-5 fade-in">
+        <h2 class="text-center mb-4">Welcome to the Stress Detection System</h2>
+        <p class="text-center lead">An interactive platform for analyzing multimodal (audio and text) data for stress detection.</p>
+        <div class="text-center mt-5">
+            <button class="btn btn-primary btn-lg interactive-btn" onclick="goToForm()">Start Prediction</button>
+        </div>
+    </div>
+
+    <div id="predictionPage" class="container mt-5 fade-out" style="display: none;">
+        <h2 class="text-center mb-4">Multimodal Stress Detection</h2>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="transcriptFile" class="form-label">Transcript (CSV):</label>
+                <input type="file" id="transcriptFile" name="transcript" class="form-control" accept=".csv" required>
+            </div>
+            <div class="mb-3">
+                <label for="audioFile" class="form-label">Audio File (WAV/MP3):</label>
+                <input type="file" id="audioFile" name="audio" class="form-control" accept=".wav, .mp3" required>
+            </div>
+            <div class="mb-4">
+                <label class="form-label">Select Model(s):</label><br>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="depressedModel" name="models" value="depressed">
+                    <label class="form-check-label" for="depressedModel">Depression Model</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="ptsdModel" name="models" value="ptsd">
+                    <label class="form-check-label" for="ptsdModel">PTSD Model</label>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary interactive-btn w-100">Predict</button>
+        </form>
+
+        <div id="loading" class="mt-4 text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Processing your request, please wait...</p>
+        </div>
+
+        <div id="result" class="mt-4"></div>
+        <button class="btn btn-secondary interactive-btn mt-4 w-100" onclick="goToHome()">Go Back</button>
+
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Constants from your Python backend (for feature naming)
+        const TEXT_DIM = 768; // BERT embedding dimension
+        const AUDIO_DIM = 193; // Total audio feature dimension
+
+        // Define a mapping for audio features (approximate based on your Python code)
+        // This is simplified. For real-world use, you'd want more precise names and ranges
+        const AUDIO_FEATURE_NAMES = [];
+        const audioFeatureGroups = [
+            { name: 'MFCC', count: 13 },
+            { name: 'Delta MFCC', count: 13 },
+            { name: 'Delta2 MFCC', count: 13 },
+            { name: 'Chroma', count: 12 },
+            { name: 'Mel Spectrogram', count: 128 },
+            { name: 'Spectral Contrast', count: 7 },
+            { name: 'Tonnetz', count: 6 },
+            { name: 'Pitch', count: 1 }
+        ];
+
+        let audioFeatureCounter = 0;
+        for (const group of audioFeatureGroups) {
+            for (let i = 0; i < group.count; i++) {
+                AUDIO_FEATURE_NAMES.push(`${group.name}_${i + 1}`);
+            }
+        }
+
+
+        $(document).ready(function() {
+            $('#uploadForm').on('submit', function(event) {
+                event.preventDefault();
+
+                // Show loading animation, hide result, and start fade-in
+                $('#loading').show();
+                $('#result').hide().empty(); // Clear previous results
+
+                var formData = new FormData(this);
+
+                $.ajax({
+                    url: '/predict',
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        $('#loading').hide();
+                        $('#result').fadeIn().empty(); // Clear previous results
+
+                        Object.keys(response).forEach(function(modelKey) {
+                            let modelData = response[modelKey];
+                            let modelNameDisplay = modelKey === 'Depression' ? 'Depression' : 'PTSD';
+
+                            let modelHtml = `
+                                <div class="card mb-4">
+                                    <div class="card-header bg-primary text-white">
+                                        <h4 class="mb-0">${modelNameDisplay} Prediction</h4>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="fs-5"><strong>Result:</strong> <span class="badge ${modelData.label === 'Positive' ? 'bg-danger' : 'bg-success'}">${modelData.label}</span></p>
+                                        <p class="fs-5"><strong>Probability:</strong> ${modelData.probability.toFixed(4)}</p>
+
+                                        <h5 class="mt-4">Feature Contributions (SHAP Values)</h5>
+                                        <p class="text-muted">Below are the most influential features for this prediction. Positive values indicate a push towards 'Positive', negative values towards 'Negative'.</p>
+                                        <div class="chart-container">
+                                            <canvas id="${modelKey.toLowerCase()}-chart"></canvas>
+                                        </div>
+                                        <div class="shap-explanation-container" id="${modelKey.toLowerCase()}-explanation">
+                                            </div>
+                                    </div>
+                                </div>
+                            `;
+                            $('#result').append(modelHtml);
+
+                            if (modelData.explanation && modelData.explanation.length > 0) {
+                                // KernelExplainer returns a list of arrays, one per output. For binary, it's usually [0]
+                                let rawShapValues = modelData.explanation[0];
+
+                                let featureNames = [];
+                                // Generate generic text feature names
+                                for (let i = 0; i < TEXT_DIM; i++) {
+                                    featureNames.push(`Text_Embedding_${i + 1}`);
+                                }
+                                // Append specific audio feature names
+                                for (let i = 0; i < AUDIO_DIM; i++) {
+                                    featureNames.push(AUDIO_FEATURE_NAMES[i] || `Audio_Feature_${i + 1}`);
+                                }
+
+                                let featureContributions = rawShapValues.map((value, index) => ({
+                                    name: featureNames[index] || `Unknown_Feature_${index}`,
+                                    value: value
+                                }));
+
+                                // Sort by absolute SHAP value to show most impactful features
+                                featureContributions.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+
+                                // Display top N features (e.g., top 15 for the chart)
+                                const numFeaturesToShowInChart = 15;
+                                const topFeaturesForChart = featureContributions.slice(0, Math.min(numFeaturesToShowInChart, featureContributions.length));
+
+                                // Generate chart
+                                const chartId = `${modelKey.toLowerCase()}-chart`;
+                                const ctx = document.getElementById(chartId).getContext('2d');
+
+                                new Chart(ctx, {
+                                    type: 'bar',
+                                    data: {
+                                        labels: topFeaturesForChart.map(fc => fc.name),
+                                        datasets: [{
+                                            label: 'SHAP Value',
+                                            data: topFeaturesForChart.map(fc => fc.value),
+                                            backgroundColor: topFeaturesForChart.map(fc => fc.value > 0 ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)'), // Green for positive, Red for negative
+                                            borderColor: topFeaturesForChart.map(fc => fc.value > 0 ? 'rgba(40, 167, 69, 1)' : 'rgba(220, 53, 69, 1)'),
+                                            borderWidth: 1
+                                        }]
+                                    },
+                                    options: {
+                                        indexAxis: 'y', // Horizontal bars
+                                        responsive: true,
+                                        maintainAspectRatio: false,
+                                        scales: {
+                                            x: {
+                                                beginAtZero: true,
+                                                title: {
+                                                    display: true,
+                                                    text: 'SHAP Value'
+                                                }
+                                            },
+                                            y: {
+                                                title: {
+                                                    display: true,
+                                                    text: 'Feature'
+                                                }
+                                            }
+                                        },
+                                        plugins: {
+                                            legend: {
+                                                display: false
+                                            },
+                                            title: {
+                                                display: true,
+                                                text: `Top ${Math.min(numFeaturesToShowInChart, featureContributions.length)} Feature Contributions`
+                                            },
+                                            tooltip: {
+                                                callbacks: {
+                                                    label: function(context) {
+                                                        let label = context.dataset.label || '';
+                                                        if (label) {
+                                                            label += ': ';
+                                                        }
+                                                        label += context.parsed.x.toFixed(4); // Display value with 4 decimals
+                                                        return label;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+
+                                // You can optionally add a detailed text list for more features if desired
+                                // const numFeaturesToShowInList = 20; // Show more in list if desired
+                                // let detailedExplanationHtml = '<ul class="list-group list-group-flush">';
+                                // for (let i = 0; i < Math.min(numFeaturesToShowInList, featureContributions.length); i++) {
+                                //     let fc = featureContributions[i];
+                                //     let valueClass = fc.value > 0 ? 'text-success' : 'text-danger';
+                                //     detailedExplanationHtml += `<li class="list-group-item">
+                                //                                     <strong>${fc.name}:</strong> <span class="${valueClass}">${fc.value.toFixed(4)}</span>
+                                //                                 </li>`;
+                                // }
+                                // detailedExplanationHtml += '</ul>';
+                                // $(`#${modelKey.toLowerCase()}-explanation`).html(detailedExplanationHtml);
+
+                            } else {
+                                $(`#${modelKey.toLowerCase()}-explanation`).html('<p class="text-warning">No SHAP explanation available.</p>');
+                            }
+                        });
+                    },
+                    error: function(error) {
+                        $('#loading').hide();
+                        $('#result').fadeIn().html(`<p class="text-danger fs-5">Error: ${error.responseJSON ? error.responseJSON.error : 'An unexpected error occurred.'}</p>`);
+                    }
+                });
+            });
+        });
+
+        function goToForm() {
+            $('#homepage').fadeOut(500, function() {
+                $('#predictionPage').removeClass('fade-out').addClass('fade-in').show();
+            });
+        }
+
+        function goToHome() {
+            $('#predictionPage').fadeOut(500, function() {
+                $('#homepage').removeClass('fade-out').addClass('fade-in').show();
+                $('#result').hide().empty(); // Clear results when going back
+                $('#uploadForm')[0].reset(); // Reset the form
+                $('#loading').hide(); // Hide loading if it was active
+            });
+        }
+    </script>
+</body>
+</html>
