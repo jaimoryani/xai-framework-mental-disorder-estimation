@@ -1,6 +1,6 @@
 ### Multimodal Depression and PTSD Detection System
 
-This project is a Flask-based web application that predicts Depression and PTSD levels from multimodal inputs, including audio files and transcript files. The system utilizes pre-trained deep learning models for analysis and supports feature extraction from both modalities.
+This project is a Flask-based web application that supports early and explainable detection of Depression and PTSD using multimodal inputs, audio recordings, and transcript files. The system leverages deep learning models integrated with Explainable AI (XAI) techniques such as SHAP and attention mechanisms to ensure transparency and clinical trust.
 
 ---
 
@@ -37,6 +37,8 @@ Ensure the following are installed on your system:
 - Pandas
 - NLTK
 - NumPy
+- cikit-learn
+- Matplotlib (for SHAP visualization)
 
 Download additional NLTK resources:
 ```bash
@@ -83,15 +85,16 @@ pip install -r requirements.txt
 
 ```
 .
-├── app.py                  # Main Flask application
-├── uploads/                # Directory for storing uploaded files
-│   ├── transcripts/        # Sub-directory for transcripts
-│   └── audio/              # Sub-directory for audio files
-├── requirements.txt        # Python dependencies
+├── app.py                   # Main Flask application
+├── uploads/                 # Directory for storing uploaded files
+│   ├── audio/               # Sub-directory for transcripts
+│   └── transcripts/         # Sub-directory for audio files
+├── requirements.txt         # Python dependencies
 ├── templates/
-│   └── index.html          # HTML template for the web interface
-└── README.md               # Project documentation
-```
+│   └── index.html           # HTML template for the web interface
+├── static/
+│   └── shap_output/         # Stores SHAP visualizations
+└── README.md                # Project documentation
 
 ---
 
@@ -168,3 +171,7 @@ This project is licensed under the MIT License. See the LICENSE file for details
 - Librosa for audio processing utilities.
 
 ```
+## Conributors
+
+Ritesh Chandra (IIIT Allahabad) rsi2022001@iiita.ac.in
+
